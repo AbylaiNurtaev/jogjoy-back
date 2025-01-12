@@ -128,3 +128,43 @@ export const getTelegramId = async (req, res) => {
     return res.status(500).json({ error: 'Ошибка при обработке initData.' });
   }
 };
+
+
+export const getSubscribe = async (req, res) => {
+  try {
+    // Ищем пользователя по ID
+    const user = await User.findOne({ _id: req.body.id });
+
+    if (user) {
+      // Обновляем статус подписки
+      user.subscribe = true;
+
+      // Сохраняем изменения
+      await user.save();
+
+      // Возвращаем успешный ответ
+      return res.status(200).json({ message: 'Подписка успешно оформлена', user });
+    } else {
+      // Если пользователь не найден
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+  } catch (error) {
+    console.error(error);
+    // Отправляем ошибку при исключении
+    return res.status(500).json({ message: 'Не удалось оформить подписку' });
+  }
+};
+
+
+export const getUser = async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id });
+    if(user){
+      res.json(user)
+    }else{
+      return res.status(404).json({ message: "Пользователь не найден" })
+    }
+  } catch (error) {
+    return res.status(500).json({ message: 'Не удалось оформить подписку' });
+  }
+}
