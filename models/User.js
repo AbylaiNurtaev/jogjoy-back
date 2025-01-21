@@ -8,7 +8,8 @@ const UserSchema = new mongoose.Schema({
     subscribe: {
         type: Boolean,
         default: false
-    }
+    },
+    avatar: String
 }, {
     timestamps: true,
 });

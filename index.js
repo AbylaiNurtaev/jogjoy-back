@@ -64,6 +64,7 @@ app.post('/login', UserController.login)
 app.post('/subscribe', UserController.getSubscribe)
 app.post('/getTelegramId', UserController.getTelegramId)
 app.get('/getUserById/:id', UserController.getUser)
+app.post('/uploadPhoto/:id', upload.single('photo'), UserController.uploadPhoto)
 
 
 // Orders

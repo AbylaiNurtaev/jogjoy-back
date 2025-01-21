@@ -2,6 +2,24 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 import User from '../models/User.js'; // Убедитесь, что путь правильный
+import sharp from 'sharp';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import mongoose from 'mongoose';
+
+
+const bucketName = process.env.BUCKET_NAME;
+const bucketRegion = process.env.BUCKET_REGION;
+const accessKey = process.env.ACCESS_KEY;
+const secretAccessKey = process.env.SECRET_ACCESS_KEY;
+
+const s3 = new S3Client({
+  credentials: {
+      accessKeyId: accessKey,
+      secretAccessKey: secretAccessKey,
+  },
+  region: bucketRegion,
+});
 
 export const register = async (req, res) => {
   try {
@@ -159,12 +177,70 @@ export const getSubscribe = async (req, res) => {
 export const getUser = async (req, res) => {
   try {
     const user = await User.findOne({ _id: req.params.id });
-    if(user){
-      res.json(user)
-    }else{
-      return res.status(404).json({ message: "Пользователь не найден" })
+
+    if (user) {
+      if (user.avatar) {
+        // Генерируем временную ссылку для доступа к аватару
+        const getObjectParams = {
+          Bucket: bucketName,
+          Key: user.avatar,
+        };
+
+        const command = new GetObjectCommand(getObjectParams);
+        const avatarUrl = await getSignedUrl(s3, command, { expiresIn: 3600 }); // Срок действия ссылки — 1 час
+
+        // Включаем ссылку на аватар в ответ
+        const userWithAvatarUrl = { ...user._doc, avatar: avatarUrl };
+
+        res.json(userWithAvatarUrl);
+      } else {
+        // Если аватар отсутствует, возвращаем пользователя без изменений
+        res.json(user);
+      }
+    } else {
+      return res.status(404).json({ message: 'Пользователь не найден' });
     }
   } catch (error) {
-    return res.status(500).json({ message: 'Не удалось оформить подписку' });
+    console.error(error);
+    return res.status(500).json({ message: 'Не удалось получить данные пользователя' });
   }
-}
+};
+
+
+export const uploadPhoto = async (req, res) => {
+  const userId = req.params.id;
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ error: 'Некорректные параметры' });
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    // Upload file to S3
+    const buffer = await sharp(req.file.buffer).toBuffer();
+    const imageName = `${userId}_${Date.now()}`;
+
+    const params = {
+      Bucket: bucketName,
+      Key: imageName,
+      Body: buffer,
+      ContentType: req.file.mimetype,
+    };
+
+    const command = new PutObjectCommand(params);
+    await s3.send(command);
+
+    // Update the user's photo field
+    user.avatar = imageName;
+    await user.save();
+
+    res.json({ message: 'Фото успешно загружено', user });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка при загрузке фото' });
+  }
+};
